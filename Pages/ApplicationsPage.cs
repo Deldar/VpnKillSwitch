@@ -274,6 +274,13 @@ internal sealed class ApplicationsPage : PagePanel
             return AddResult.None;
         }
 
+        if (Directory.Exists(path) && !File.Exists(path))
+        {
+            string? foundExe = Directory.EnumerateFiles(path, "*.exe", SearchOption.TopDirectoryOnly).FirstOrDefault();
+            if (foundExe is not null)
+                path = foundExe;
+        }
+
         if (!File.Exists(path))
             return AddResult.None;
 
@@ -282,20 +289,38 @@ internal sealed class ApplicationsPage : PagePanel
         if (exactMatch != null)
             return AddResult.None;
 
-        string exeName = Path.GetFileNameWithoutExtension(path);
+        string deducedName = KnownApps.IdentifyName(path);
+        if (string.IsNullOrWhiteSpace(deducedName))
+            deducedName = Path.GetFileNameWithoutExtension(path);
 
-        var existingSameApp = _settings.ProtectedApps.FirstOrDefault(a =>
-            string.Equals(a.Name, exeName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(Path.GetFileNameWithoutExtension(a.Path), exeName, StringComparison.OrdinalIgnoreCase));
+        var staleMatch = _settings.ProtectedApps.FirstOrDefault(a =>
+            !File.Exists(a.Path) &&
+            (string.Equals(a.Name, deducedName, StringComparison.OrdinalIgnoreCase) ||
+             (!string.IsNullOrWhiteSpace(a.SearchRoot) && path.StartsWith(a.SearchRoot, StringComparison.OrdinalIgnoreCase))));
 
-        if (existingSameApp != null)
+        if (staleMatch != null)
         {
-            existingSameApp.Path = path;
-            ApplicationPathResolver.ConfigureVersionAwareLookup(existingSameApp);
+            staleMatch.Name = deducedName;
+            staleMatch.Path = path;
+            ApplicationPathResolver.ConfigureVersionAwareLookup(staleMatch);
             return AddResult.Updated;
         }
 
-        var app = ProtectedApp.FromPath(path);
+        string uniqueName = deducedName;
+        int counter = 2;
+        while (_settings.ProtectedApps.Any(a => string.Equals(a.Name, uniqueName, StringComparison.OrdinalIgnoreCase)))
+        {
+            uniqueName = $"{deducedName} ({counter++})";
+        }
+
+        var app = new ProtectedApp
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Name = uniqueName,
+            Path = path,
+            Enabled = true
+        };
+        ApplicationPathResolver.ConfigureVersionAwareLookup(app);
         _settings.ProtectedApps.Add(app);
         return AddResult.Added;
     }

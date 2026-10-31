@@ -5,6 +5,7 @@ namespace VpnKillSwitch;
 public static class ApplicationPathResolver
 {
     private static readonly Regex VersionToken = new(@"\d+(?:\.\d+)+", RegexOptions.Compiled);
+    private static readonly Regex HexHashToken = new(@"^[0-9a-fA-F]{6,}$", RegexOptions.Compiled);
     private const int MaxMatches = 16;
 
     public static void ConfigureVersionAwareLookup(ProtectedApp app)
@@ -108,6 +109,9 @@ public static class ApplicationPathResolver
 
     private static string CreateSegmentPattern(string segment)
     {
+        if (HexHashToken.IsMatch(segment))
+            return @"^[0-9a-fA-F]+$";
+
         MatchCollection versions = VersionToken.Matches(segment);
         if (versions.Count == 0)
             return "^" + Regex.Escape(segment) + "$";

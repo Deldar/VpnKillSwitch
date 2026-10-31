@@ -209,10 +209,14 @@ public sealed class ProtectedApp
 
     public static ProtectedApp FromPath(string path)
     {
+        string name = KnownApps.IdentifyName(path);
+        if (string.IsNullOrWhiteSpace(name))
+            name = System.IO.Path.GetFileNameWithoutExtension(path);
+
         var app = new ProtectedApp
         {
             Id = Guid.NewGuid().ToString("N"),
-            Name = System.IO.Path.GetFileNameWithoutExtension(path),
+            Name = name,
             Path = path,
             Enabled = true
         };

@@ -63,6 +63,8 @@ internal static class KnownApps
             @"%LOCALAPPDATA%\Programs\Claude\Claude.exe"
         ]),
         new("Claude Code", [
+            @"%APPDATA%\Claude\claude-code\*\*\claude.exe",
+            @"%LOCALAPPDATA%\Claude\claude-code\*\*\claude.exe",
             @"%USERPROFILE%\.local\bin\claude.exe",
             @"%LOCALAPPDATA%\Programs\claude\claude.exe",
             @"%APPDATA%\npm\claude.cmd",
@@ -176,8 +178,16 @@ internal static class KnownApps
 
             string? newest = NewestMatch(app);
 
-            if (newest is null && (FindByName(app.Name) ?? FindByName(Path.GetFileNameWithoutExtension(app.Path))) is { } known)
-                newest = Resolve(known);
+            if (newest is null)
+            {
+                KnownApp? known = FindByName(app.Name) ?? FindByPath(app.Path);
+                if (known is not null)
+                {
+                    newest = Resolve(known);
+                    if (string.IsNullOrWhiteSpace(app.Name) || string.Equals(app.Name, "claude", StringComparison.OrdinalIgnoreCase))
+                        app.Name = known.Name;
+                }
+            }
 
             if (newest is null)
             {
@@ -216,14 +226,51 @@ internal static class KnownApps
         return app;
     }
 
+    public static string IdentifyName(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        if (path.Contains("claude-code", StringComparison.OrdinalIgnoreCase))
+            return "Claude Code";
+
+        KnownApp? match = FindByPath(path);
+        if (match is not null)
+            return match.Name;
+
+        return Path.GetFileNameWithoutExtension(path);
+    }
+
+    public static KnownApp? FindByPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        if (path.Contains("claude-code", StringComparison.OrdinalIgnoreCase))
+            return FindByName("Claude Code");
+
+        foreach (KnownApp known in Catalog)
+        {
+            foreach (string candidate in known.Candidates)
+            {
+                string exp = Environment.ExpandEnvironmentVariables(candidate);
+                string dir = Path.GetDirectoryName(exp) ?? string.Empty;
+                string dirRoot = dir.Split('*')[0].TrimEnd('\\', '/');
+                if (dirRoot.Length > 0 && path.StartsWith(dirRoot, StringComparison.OrdinalIgnoreCase))
+                    return known;
+            }
+        }
+
+        return null;
+    }
+
     private static bool Contains(List<ProtectedApp> apps, string path) =>
         apps.Any(app => string.Equals(app.Path, path, StringComparison.OrdinalIgnoreCase));
 
     private static bool ContainsName(List<ProtectedApp> apps, string name) =>
         apps.Any(app =>
             string.Equals(app.Name, name, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(app.Name.Replace(" ", ""), name.Replace(" ", ""), StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(Path.GetFileNameWithoutExtension(app.Path), name, StringComparison.OrdinalIgnoreCase));
+            string.Equals(app.Name.Replace(" ", ""), name.Replace(" ", ""), StringComparison.OrdinalIgnoreCase));
 
     private static KnownApp? FindByName(string? name)
     {
